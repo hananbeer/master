@@ -1,3 +1,4 @@
+import sys
 import sha3
 import json
 
@@ -331,7 +332,8 @@ def delinearize(contract_name):
     base_ids = reversed(node['linearizedBaseContracts'][1:])
     for base_id in base_ids:
         base = ast.by_id[base_id]
-        node['nodes'] = ast.clone(base['nodes']) + node['nodes']
+        # TODO: check parent_id is ok
+        node['nodes'] = ast.clone(base['nodes'], node['id']) + node['nodes']
 
     # remove inherited contracts
     node['linearizedBaseContracts'] = node['linearizedBaseContracts'][:1]
@@ -347,10 +349,15 @@ def make_block(*statements):
         "statements": statements
     }
 
+def reparent(parent_id, *nodes):
+    for node in nodes:
+        node['parent_id'] = parent_id,
+
 def make_tuple(components):
+    new_id = next_node_id()
     return {
-        "components": ast.clone(components),
-        "id": next_node_id(),
+        "components": ast.clone(components, new_id),
+        "id": new_id,
         "isConstant": False,
         "isInlineArray": False,
         "isLValue": False,
@@ -366,7 +373,8 @@ def make_tuple(components):
 
 # make VariableDeclarationStatement ie. (params) = (args) from FunctionDefinition(params), FunctionCall(args)
 def make_var_dec_st_from_func_call(params_decl, arg_values):
-    cloned_decl = ast.clone(params_decl)
+    new_id = next_node_id()
+    cloned_decl = ast.clone(params_decl, new_id)
     # for d in cloned_decl:
     #     # it's ok to rename here because it was cloned above
     #     d['name'] += '_' + d['id']
@@ -390,7 +398,7 @@ def make_var_dec_st_from_func_call(params_decl, arg_values):
     var_dec = {
         "assignments": assignment_ids,
         "declarations": cloned_decl,
-        "id": next_node_id(),
+        "id": new_id,
         "initialValue": tuple_expr,
         "nodeType": "VariableDeclarationStatement",
         "src": "29624:70:0"
@@ -398,15 +406,59 @@ def make_var_dec_st_from_func_call(params_decl, arg_values):
 
     return var_dec
 
-def embed_inline_func(fc_node, depth=-1):
+"""
+IDEA: to embed modifiers, maybe use embed_inline BEFORE said function is inlined
+and also embed_inline THE FUNCTION into THE MODIFIER
+that is embed_inline(modifier, PlaceholderStatement = the function)
+
+we have:
+fd = FunctionDefinition
+fd.modifiers = ModifierInvocation[]
+fd.body = Block with fcs = FunctionCall[]
+
+need to replace fd like so:
+while fd.modifiers:
+    mod = fd.modifiers.pop()
+    fd.update such that fd.body = unmodify(mod, fd.body)
+    where
+    unmodify is mod.update such that PlaceholderStatement = fd.body
+"""
+def embed_modifiers_inplace(fd_node, depth=-1):
+    # kind = baseConstructorSpecifier  is implied Super.Body + This.body
+    # kind = modifierInvocation depends on the PlaceholderStatement
+    def replace_placeholder(node, parent):
+        if node['nodeType'] == 'PlaceholderStatement':
+            # TODO: by now it's really clear I need a library to update parent_id and such hotswap/inject/attach/etc.
+            clone_body = ast.clone(fd_node['body'], node['parent_id'])
+            node.clear()
+            node.update(clone_body)
+
+    while fd_node.get('modifiers'):
+        mod = fd_node['modifiers'].pop()
+        mod_dec = ast.by_id[mod['modifierName']['referencedDeclaration']]
+        mod_body = ast.clone(mod_dec['body'], fd_node['id'])
+        ast.walk_tree(mod_body, callback=replace_placeholder)
+        fd_node['body'] = mod_body
+        
+    return True
+
+
+def embed_inline_func_inplace(fc_node, depth=-1):
+    if 'referencedDeclaration' not in fc_node['expression']: # ['nodeType'] == 'MemeberAccess':
+        return False # this is likely an external call (TODO: test Super.func and I guess public funcs)
+    
     ref_id = fc_node['expression']['referencedDeclaration']
     func_dec = ast.by_id.get(ref_id)
     if not func_dec:
         return False
 
+    if 'body' not in func_dec:
+        return False # TODO: check when body is empty (calls on interfaces?)
+    
     # TODO: walk the body to replace identifiers referncing the func_dec params
-    inline_body = ast.clone(func_dec['body'])
-    inline_body['parent_id'] = fc_node['parent_id']
+    # TODO: embed modifiers first?
+    inline_body = ast.clone(func_dec['body'], fc_node['parent_id'])
+    #embed_modifiers_inplace(inline_body) # TODO: need to replace func_dec not func_dec['body']
     # create VariableDeclarations (decl_params) = (passed_args)
     vds = make_var_dec_st_from_func_call(func_dec['parameters']['parameters'], fc_node['arguments'])
     vds['documentation'] = '@inlined from ' + func_dec['name']
@@ -425,6 +477,7 @@ def embed_inline_func(fc_node, depth=-1):
 
 # TODO: should embed a single function, then before the call
 # instead of contract_name pass the FunctionCall node to embed?
+# NOTE: must inline modifiers too
 def embed_inline(contract_name, method_name, depth=-1):
     """
     embed inline functions
@@ -449,8 +502,13 @@ def embed_inline(contract_name, method_name, depth=-1):
     if not target_func:
         return False
         
+    # first, embed modifiers (TODO: need to embed modifiers for FunctionCall too)
+    # TODO: fix reparenting here
+    embed_modifiers_inplace(target_func)
+    #return True
+
     # while there are FunctionCalls, inline them
-    while True:
+    while depth != 0:
         # TODO: get all FunctionCalls, recursively replace them (wrap them in Block)
         func_calls = []
         def find_related_func_call(node, parent):
@@ -461,8 +519,9 @@ def embed_inline(contract_name, method_name, depth=-1):
                 return
 
             # if no parent, it's just a type conversion on global scope..
-            if target_func != ast.first_parent(node, 'FunctionDefinition'):
-                return
+            func_def = ast.first_parent(node, 'FunctionDefinition')
+            if func_def != target_func:
+               return
 
             tmp = ast.first_parent(node, 'ContractDefinition')
             if tmp['id'] in target_contract['linearizedBaseContracts']:
@@ -475,11 +534,13 @@ def embed_inline(contract_name, method_name, depth=-1):
 
         count = 0
         for fc in func_calls:
-            if embed_inline_func(fc):
+            if embed_inline_func_inplace(fc):
                 count += 1
 
         if count == 0:
             break
+
+        depth -= 1
 
     return True
 
@@ -488,19 +549,28 @@ if DEBUG:
     # FOR DEBUGGING - rename all identifiers to include the respective id
     # note: this actually seems to fix var shadowing issues, for now; but it's not the correct solution
     # for the long term as the tree is out of sync
-    def rename_all_ids(node, parent):
+    def rename_var_decs(node, parent):
         if node['nodeType'] == 'VariableDeclaration':
             node['name'] += '_' + str(node['id'])
 
-        if node['nodeType'] == 'Identifier' and node['referencedDeclaration'] > 0:
-            node['name'] += '_' + str(node['referencedDeclaration'])
+    def rename_ids(node, parent):
+        if node['nodeType'] == 'Identifier':
+            # TODO: YulIdentifier doesn't seem to have referencedDeclaration so will have to search up the scope to
+            # (probably best preprocess this to add [guessed] referencedDeclaration to YulIdentifier)
+            ref_node = ast.by_id.get(node['referencedDeclaration'])
+            if ref_node:
+                node['name'] = ref_node['name']
 
-    ast.walk_tree(ast.root, callback=rename_all_ids)
+    ast.walk_tree(ast.root, callback=rename_var_decs)
+    ast.walk_tree(ast.root, callback=rename_ids)
 
 
 #patch_storage_slots()
 #delinearize('Zapper_Matic_Bridge_V1_1')
-embed_inline('Zapper_Matic_Bridge_V1_1', 'ZapBridge')
+try:
+    embed_inline('Zapper_Matic_Bridge_V1_1', 'ZapBridge', 1)
+except:
+    print('error: possibly too deep?', file=sys.stderr)
 
 data = { "sources": { build_path: { "AST": ast.root } } }
 print(json.dumps(data)) #, indent=4))

@@ -46,29 +46,43 @@ class AstMapper:
             else:
                 self.walk_tree(child, node, callback)
 
-    def clone(self, node):
+    def clone(self, node, parent_id=None):
         remapping = {}
         def fix_ids(node, parent):
             new_id = self.next_node_id()
             remapping[node['id']] = new_id
             node['id'] = new_id
+            self.by_id[new_id] = node
+            if parent:
+                node['parent_id'] = parent['id']
+            elif 'parent_id' not in node:
+                del node['parent_id']
 
-        def remap_ids(node, parent):
+        def remap_assignments(node, parent):
+            # TODO: use parent?
             if 'assignments' in node:
                 node['assignments'] = [remapping.get(id, id) for id in node['assignments']]
 
         if type(node) is list:
-            return [self.clone(child) for child in node]
+            return [self.clone(child, parent_id) for child in node]
 
         # TODO: will need to re-map tree on every change... (can diff by references? or just re-map all?)
         node = copy.deepcopy(node)
+        # TODO: more remappings, or perhaps move outside?
         self.walk_tree(node, callback=fix_ids)
-        self.walk_tree(node, callback=remap_ids)
+        self.walk_tree(node, callback=remap_assignments)
+        
+        if parent_id:
+            node['parent_id'] = parent_id
+
         return node
 
     def first_parent(self, node, *types):
         while 'parent_id' in node:
-            node = self.by_id[node['parent_id']]
+            node = self.by_id.get(node['parent_id'])
+            if not node:
+                return None # TODO: this is an error?
+
             if node['nodeType'] in types:
                 return node
 
