@@ -51,7 +51,9 @@ class AstMapper:
         remapping = {}
         def fix_ids(node, parent):
             new_id = self.next_node_id()
-            remapping[node['id']] = new_id
+            # it seems Yul* nodes don't have ids (TODO: ensure all nodes have an id?)
+            if 'id' in node:
+                remapping[node['id']] = new_id
             node['id'] = new_id
             self.by_id[new_id] = node
             if parent:
