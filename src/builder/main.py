@@ -10,7 +10,7 @@ def print_ast(node, depth=0):
 def main():
     args = sys.argv
     if len(args) != 2:
-        print(f'Usage: {args[0]} <build_path> <contract_name>')
+        print(f'Usage: {args[0]} <build_path>')
         exit(1)
 
     build_path = args[1]

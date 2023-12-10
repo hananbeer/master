@@ -47,6 +47,7 @@ class AstMapper:
                 self.walk_tree(child, node, callback)
 
     def clone(self, node, parent_id=None):
+        # TODO: see if need to fix referenceDeclarations too
         remapping = {}
         def fix_ids(node, parent):
             new_id = self.next_node_id()

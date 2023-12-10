@@ -423,7 +423,8 @@ while fd.modifiers:
     where
     unmodify is mod.update such that PlaceholderStatement = fd.body
 """
-def embed_modifiers_inplace(fd_node, depth=-1):
+# TODO: this does not embed parameters :(
+def embed_modifiers_inplace(fd_node):
     # kind = baseConstructorSpecifier  is implied Super.Body + This.body
     # kind = modifierInvocation depends on the PlaceholderStatement
     def replace_placeholder(node, parent):
@@ -443,7 +444,7 @@ def embed_modifiers_inplace(fd_node, depth=-1):
     return True
 
 
-def embed_inline_func_inplace(fc_node, depth=-1):
+def embed_inline_func_inplace(fc_node):
     if 'referencedDeclaration' not in fc_node['expression']: # ['nodeType'] == 'MemeberAccess':
         return False # this is likely an external call (TODO: test Super.func and I guess public funcs)
     
@@ -478,7 +479,7 @@ def embed_inline_func_inplace(fc_node, depth=-1):
 # TODO: should embed a single function, then before the call
 # instead of contract_name pass the FunctionCall node to embed?
 # NOTE: must inline modifiers too
-def embed_inline(contract_name, method_name, depth=-1):
+def embed_inline(contract_name, method_name, embed_modifiers=True, max_depth=-1):
     """
     embed inline functions
     work on level of <contract>.<method> (method could be internal itself)
@@ -504,11 +505,11 @@ def embed_inline(contract_name, method_name, depth=-1):
         
     # first, embed modifiers (TODO: need to embed modifiers for FunctionCall too)
     # TODO: fix reparenting here
-    embed_modifiers_inplace(target_func)
-    #return True
+    if embed_modifiers:
+        embed_modifiers_inplace(target_func)
 
     # while there are FunctionCalls, inline them
-    while depth != 0:
+    while max_depth != 0:
         # TODO: get all FunctionCalls, recursively replace them (wrap them in Block)
         func_calls = []
         def find_related_func_call(node, parent):
@@ -540,11 +541,65 @@ def embed_inline(contract_name, method_name, depth=-1):
         if count == 0:
             break
 
-        depth -= 1
+        max_depth -= 1
 
     return True
 
-DEBUG = True
+def make_identifier(name, parent_id, referencedDeclaration=-1):
+    return {
+        "id": next_node_id(),
+        "name": name,
+        "nodeType": "Identifier",
+        #"overloadedDeclarations": [],
+        "referencedDeclaration": referencedDeclaration,
+        "src": "0:0:0",
+        "typeDescriptions": {
+            "typeIdentifier": "t_todo",
+            "typeString": "type(TODO)"
+        },
+        "parent_id": parent_id
+    }
+
+# embed "using .. for .." statements BECAUSE THEY SUCK
+def embed_using_for():
+    lib_funcs_to_lib_id = {}
+    lib_ids = {}
+    for func_def in ast.by_type.get('FunctionDefinition'):
+        contract = ast.first_parent(func_def, 'ContractDefinition')
+        if contract.get('contractKind') != 'library':
+            continue
+
+        lib_ids[contract['id']] = contract['name']
+        lib_funcs_to_lib_id[func_def['id']] = contract['name']
+
+    for mem_acc in ast.by_type.get('MemberAccess'):
+        ref_id = mem_acc.get('referencedDeclaration')
+        if ref_id not in lib_funcs_to_lib_id:
+            continue
+
+        # note: structure should be FunctionCall(MemberAccess(expression), args..)
+        # and translated to FunctionCall(expression, MemberAccess(Identifier(library)) + args)
+        func_call = ast.by_id[mem_acc['parent_id']]
+        if func_call['nodeType'] != 'FunctionCall':
+            continue
+
+        first_arg = mem_acc['expression']
+        
+        # check that the accessed member isn't already the lib
+        exp_ref_id = first_arg.get('referencedDeclaration')
+        if exp_ref_id in lib_ids:
+            continue
+
+        # replace with a lib Identifier
+        id_node = make_identifier(lib_funcs_to_lib_id[ref_id], mem_acc['parent_id'])
+        mem_acc['expression'] = id_node
+        func_call['arguments'] = [first_arg] + func_call['arguments']
+
+    for using in ast.by_type.get('UsingForDirective'):
+        ast.by_id[using['parent_id']]['nodes'].remove(using)
+
+
+DEBUG = False
 if DEBUG:
     # FOR DEBUGGING - rename all identifiers to include the respective id
     # note: this actually seems to fix var shadowing issues, for now; but it's not the correct solution
@@ -564,13 +619,43 @@ if DEBUG:
     ast.walk_tree(ast.root, callback=rename_var_decs)
     ast.walk_tree(ast.root, callback=rename_ids)
 
-
+embed_using_for()
 #patch_storage_slots()
 #delinearize('Zapper_Matic_Bridge_V1_1')
-try:
-    embed_inline('Zapper_Matic_Bridge_V1_1', 'ZapBridge', 1)
-except:
-    print('error: possibly too deep?', file=sys.stderr)
+# try:
+#     embed_inline('Zapper_Matic_Bridge_V1_1', 'ZapBridge', embed_modifiers=True, max_depth=int(sys.argv[-1]))
+# except:
+#     print('error: possibly too deep?', file=sys.stderr)
 
 data = { "sources": { build_path: { "AST": ast.root } } }
 print(json.dumps(data)) #, indent=4))
+
+"""
+
+IERC20(fromToken).safeTransferFrom(
+    msg.sender,
+    address(this),
+    swapAmounts[0] + (swapAmounts[1])
+);
+
+is tranlated as:
+
+(IERC20 token_529, address from_531, address to_533, uint256 value_535)
+    =
+(msg.sender, address(this), swapAmounts_1600[0] + (swapAmounts_1600[1]));
+
+
+and it should be, ideally, first converted to:
+
+SafeERC20.safeTransferFrom(
+    IERC20(fromToken),
+    msg.sender,
+    address(this),
+    swapAmounts[0] + (swapAmounts[1])
+);
+
+and then inlined normally (only if library is attached though?)
+
+=> hence, need to run a UsingForInliner FIRST
+
+"""

@@ -13,7 +13,7 @@ npm install -g solc-typed-ast
 
 # Usage
 
-```sh
+```bash
 # random chosen contract to work with
 # start by flattening the solidity files into a single file
 forge flatten ./data/0xe34b087bf3c99e664316a15b01e5295eb3512760/src/contracts/Polygon/Bridge/Zapper_Matic_Bridge_V1.sol > ./data/flat.sol

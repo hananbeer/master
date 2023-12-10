@@ -31,10 +31,13 @@ class SolidityAstRebuilder:
         self.writeline(text)
         self.depth += 1
 
-    def pop(self, text='}\n\n'):
+    def pop(self):
         self.depth -= 1
+        # annoying hack to avoid empty lines when closing brackets
+        while self.code[-2:] == '\n\n':
+            self.code = self.code[:-1]
         self.tab()
-        self.write(text)
+        self.write('}\n\n')
 
     def visit_node(self, node):
         node_type = node.get('nodeType')
@@ -69,16 +72,15 @@ class SolidityAstRebuilder:
         self.write(node['name'])
 
     def process_ElementaryTypeName(self, node):
-        if 'stateMutability' in node and node['stateMutability'] == 'payable' and not node['typeDescriptions']:
-            # omit address if it is payable?
-            self.write('payable')
-        else:
-            self.write(node['name'])
-            if 'stateMutability' in node and node['stateMutability'] != 'nonpayable' :
-                self.write(' ' + node['stateMutability'])
+        self.write(node['name'])
+        if 'stateMutability' in node and node['stateMutability'] != 'nonpayable' :
+            self.write(' ' + node['stateMutability'])
 
     def process_ElementaryTypeNameExpression(self, node):
-        self.visit_node(node['typeName'])
+        if node['typeName'].get('stateMutability') == 'payable':
+            self.write('payable')
+        else:
+            self.visit_node(node['typeName'])
 
     def process_UserDefinedTypeName(self, node):
         self.visit_node(node['pathNode'])
@@ -140,6 +142,7 @@ class SolidityAstRebuilder:
             self.write(' }')
 
     def process_FunctionDefinition(self, node):
+        #self.write('\n')
         self.tab()
         if node['kind'] == 'constructor':
             self.write('constructor')
@@ -156,21 +159,21 @@ class SolidityAstRebuilder:
         
         # only show visibility for functions (& free functions?)
         if node['kind'] != 'constructor':
-            self.write(f" {node['visibility']} ")
+            self.write(f" {node['visibility']}")
 
         if node['stateMutability'] != 'nonpayable':
-            self.write(node['stateMutability'] + ' ')
+            self.write(' ' + node['stateMutability'])
 
         if node['virtual']:
-            self.write('virtual ')
+            self.write(' virtual')
 
         for modifier in node.get('modifiers', []):
-            self.visit_node(modifier)
             self.write(' ')
+            self.visit_node(modifier)
 
         # TODO: override
         if 'returnParameters' in node and node['returnParameters']['parameters']:
-            self.write('returns ')
+            self.write(' returns ')
             self.visit_node(node['returnParameters'])
 
         if node['implemented']:
@@ -181,10 +184,11 @@ class SolidityAstRebuilder:
             pass # self.write(';')
 
     def process_ModifierDefinition(self, node):
+        #self.write('\n')
         self.tab()
-        self.write('modifier ' + node['name'] + ' ')
+        self.write('modifier ' + node['name'])
         self.visit_node(node['parameters'])
-        self.push('{')
+        self.push(' {')
         self.visit_node(node['body'])
         self.pop()
 
