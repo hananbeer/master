@@ -1,4 +1,4 @@
-# MASTER
+# Code MASTER
 
 Modify ASTs Easily & Reliably
 
@@ -22,12 +22,18 @@ forge flatten ./data/0xe34b087bf3c99e664316a15b01e5295eb3512760/src/contracts/Po
 # optional formatting with jq
 solc --combined-json ast ./data/flat.sol | jq . > ./data/build.json
 
-# <MODIFY AST HERE>
+# MODIFY AST HERE, e.g.:
+python ./src/ast_patcher.py > ./data/magic.json
 
-sol-ast-compile --source ./data/build.json > ./data/rebuild.sol
+sol-ast-compile --source ./data/magic.json > ./data/rebuild.sol
 
-# optionally format the rebuilt solidity code with
+# optionally format the rebuilt solidity code with (if AST is gramatically correct)
 forge fmt ./data/rebuild.sol > ./data/formatted.sol
+```
+
+there's also a work in progress AST-to-source rebuilder:
+```bash
+python ./src/builder/main.py ./data/magic.json > ./data/rebuild.sol
 ```
 
 # Notes
