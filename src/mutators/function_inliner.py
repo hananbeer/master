@@ -34,6 +34,7 @@ def make_tuple(components):
 def make_var_dec_st_from_func_call(params_decl, arg_values):
     new_id = ast.next_node_id()
     cloned_decl = ast.clone(params_decl, new_id)
+
     # for d in cloned_decl:
     #     # it's ok to rename here because it was cloned above
     #     d['name'] += '_' + d['id']
@@ -77,11 +78,16 @@ def embed_modifiers_inplace(fd_node):
 
     while fd_node.get('modifiers'):
         mod = fd_node['modifiers'].pop()
-        mod_dec = ast.by_id[mod['modifierName']['referencedDeclaration']]
-        mod_body = ast.clone(mod_dec['body'], fd_node['id'])
+        mod_def = ast.by_id[mod['modifierName']['referencedDeclaration']]
+        mod_body = ast.clone(mod_def['body'], fd_node['id'])
         ast.walk_tree(mod_body, callback=replace_placeholder)
         fd_node['body'] = mod_body
-        
+
+        mod_args = mod.get('arguments')
+        if mod_args:
+            vds = make_var_dec_st_from_func_call(mod_def['parameters']['parameters'], mod_args)
+            fd_node['body']['statements'].insert(0, vds)
+
     return True
 
 
@@ -99,7 +105,12 @@ def embed_inline_func_inplace(fc_node):
     
     # TODO: walk the body to replace identifiers referncing the func_dec params
     # TODO: embed modifiers first?
-    inline_body = ast.clone(func_dec['body'], fc_node['parent_id'])
+    cloned_func = ast.clone(func_dec)
+    embed_modifiers_inplace(cloned_func)
+
+    inline_body = cloned_func['body']
+    inline_body['parent_id'] = fc_node['parent_id']
+
     #embed_modifiers_inplace(inline_body) # TODO: need to replace func_dec not func_dec['body']
     # create VariableDeclarations (decl_params) = (passed_args)
     vds = make_var_dec_st_from_func_call(func_dec['parameters']['parameters'], fc_node['arguments'])
