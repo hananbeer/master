@@ -1,18 +1,6 @@
 
 ast = None
 
-def make_block(*statements):
-    return {
-        "id": 0,
-        #"parent_id": parent_id, # TODO: pass this..
-        "nodeType": "Block",
-        "statements": statements
-    }
-
-def reparent(parent_id, *nodes):
-    for node in nodes:
-        node['parent_id'] = parent_id,
-
 def make_tuple(components):
     new_id = ast.next_node_id()
     return {
@@ -25,6 +13,7 @@ def make_tuple(components):
     }
 
 # make VariableDeclarationStatement ie. (params) = (args) from FunctionDefinition(params), FunctionCall(args)
+# TODO: apply re-mapping ids in references too & re-assign names too?
 def make_var_dec_st_from_func_call(params_decl, arg_values):
     new_id = ast.next_node_id()
     cloned_decl = ast.clone(params_decl, new_id)
@@ -124,7 +113,6 @@ def embed_inline_func_inplace(fc_node):
     inline_body = cloned_func['body']
     inline_body['parent_id'] = fc_node['parent_id']
 
-    #embed_modifiers_inplace(inline_body) # TODO: need to replace func_dec not func_dec['body']
     # create VariableDeclarations (decl_params) = (passed_args)
     vds = make_var_dec_st_from_func_call(func_dec['parameters']['parameters'], fc_node['arguments'])
     vds['parent_id'] = inline_body['id']
@@ -173,7 +161,6 @@ def embed_inline(_ast, contract_name, method_name, embed_top_modifiers=True, max
 
     # while there are FunctionCalls, inline them
     while max_depth != 0:
-        # TODO: get all FunctionCalls, recursively replace them (wrap them in Block)
         func_calls = []
         def find_related_func_call(node, parent):
             if node['nodeType'] != 'FunctionCall':
@@ -203,8 +190,9 @@ def embed_inline(_ast, contract_name, method_name, embed_top_modifiers=True, max
 
         max_depth -= 1
 
-    import sys
+    # TODO: this should be a separate function & option to remove modifiers too
     if delete_internal:
+        # TODO: fix this stupid hack to access from the callback
         tf = [target_func]
         def delete_internal_func_calls(node, parent):
             if node['nodeType'] != 'FunctionDefinition':
@@ -213,7 +201,6 @@ def embed_inline(_ast, contract_name, method_name, embed_top_modifiers=True, max
             if node['visibility'] != 'internal':
                 return
 
-            print('deleting', node['name'], file=sys.stderr)
             parent['nodes'].remove(node)
 
         ast.walk_tree(target_contract, callback=delete_internal_func_calls)
