@@ -35,7 +35,15 @@ if DEBUG:
 # delinearizer.delinearize(ast, 'Zapper_Matic_Bridge_V1_1')
 
 from mutators import function_inliner
-function_inliner.embed_inline(ast, 'Zapper_Matic_Bridge_V1_1', 'ZapBridge', embed_modifiers=True, max_depth=6)
+
+# inline constructor
+function_inliner.embed_inline(ast, 'Zapper_Matic_Bridge_V1_1', '', embed_top_modifiers=True, max_depth=1)
+
+# inline ZapBridge external function
+function_inliner.embed_inline(ast, 'Zapper_Matic_Bridge_V1_1', 'ZapBridge', embed_top_modifiers=False, max_depth=6, delete_internal=True)
+
+# from mutators import simplify
+# simplify.simplify(ast)
 
 # wrap AST in structure that satisfies solc
 data = { "sources": { build_path: { "AST": ast.root } } }

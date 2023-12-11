@@ -30,6 +30,7 @@ class AstMapper:
             self.references_by_id[node['referencedDeclaration']].append(node)
 
     # TODO: remove parent, can just set parent of all children in the map callback
+    # TODO: bfs instead of dfs?
     def walk_tree(self, node, parent=None, callback=None):
         # TODO: need to verify there isn't an identifier named "id", eg. some "exportedSymbol", etc.
         if type(node) is not dict or 'nodeType' not in node:
@@ -39,9 +40,14 @@ class AstMapper:
             callback(node, parent)
 
         # TODO: perhaps it is better to only try to walk nodes[], body, parameters[], and some?
-        for child in node.values():
+        # list() should help with the case where the node is mutated
+        for child in list(node.values()):
             if type(child) is list:
-                for grandchild in child:
+                for i, grandchild in list(enumerate(child)):
+                    # children nodes might be mutated, so skip if they were removed
+                    if grandchild not in child:
+                        continue
+
                     self.walk_tree(grandchild, node, callback)
             else:
                 self.walk_tree(child, node, callback)
@@ -79,6 +85,11 @@ class AstMapper:
             node['parent_id'] = parent_id
 
         return node
+
+    def copy_body(self, target, source, index=0):
+        for st in reversed(source['statements']):
+            st['parent_id'] = target['id']
+            target['statements'].insert(index, st)
 
     def first_parent(self, node, *types):
         while 'parent_id' in node:

@@ -8,18 +8,10 @@ def make_literal(value):
         hex_val = '0' + hex_val
 
     return {
-        "hexValue": hex_val,
         "id": ast.next_node_id(),
-        "isConstant": False, # TODO: can probably be true
-        "isLValue": False,
-        "isPure": True,
         "kind": "number",
-        "lValueRequested": False,
         "nodeType": "Literal",
-        #"src": "30048:1:0",
         "typeDescriptions": {
-            "typeIdentifier": "t_rational_0_by_1",
-            "typeString": "int_const 1" # TODO: omit?
         },
         "value": 'bytes32(uint256(0x%x))' % value
     }
@@ -36,91 +28,43 @@ def get_map_slot_node(key_id_node, slot_id_node):
                     slot_id_node
                 ],
                 "expression": {
-                    "argumentTypes": [
-                        {
-                            "typeIdentifier": "t_rational_6_by_1",
-                            "typeString": "int_const 6"
-                        },
-                        {
-                            "typeIdentifier": "t_uint256",
-                            "typeString": "uint256"
-                        }
-                    ],
                     "expression": {
                         "id": ast.next_node_id(),
                         "name": "abi",
                         "nodeType": "Identifier",
-                        "overloadedDeclarations": [],
-                        "referencedDeclaration": -1,
-                        "src": "1123:3:18",
+                        #"overloadedDeclarations": [],
+                        #"referencedDeclaration": -1,
                         "typeDescriptions": {
-                            "typeIdentifier": "t_magic_abi",
-                            "typeString": "abi"
                         }
                     },
                     "id": ast.next_node_id(),
-                    "isConstant": False,
-                    "isLValue": False,
-                    "isPure": False,
-                    "lValueRequested": False,
-                    "memberLocation": "1127:6:18",
                     "memberName": "encode",
                     "nodeType": "MemberAccess",
-                    "src": "1123:10:18",
                     "typeDescriptions": {
-                        "typeIdentifier": "t_function_abiencode_pure$__$returns$_t_bytes_memory_ptr_$",
-                        "typeString": "function () pure returns (bytes memory)"
                     }
                 },
                 "id": ast.next_node_id(),
-                "isConstant": False,
-                "isLValue": False,
-                "isPure": False,
                 "kind": "functionCall",
-                "lValueRequested": False,
-                "nameLocations": [],
                 "names": [],
                 "nodeType": "FunctionCall",
-                "src": "1123:20:18",
-                "tryCall": False,
                 "typeDescriptions": {
-                    "typeIdentifier": "t_bytes_memory_ptr",
-                    "typeString": "bytes memory"
                 }
             }
         ],
         "expression": {
-            "argumentTypes": [
-                {
-                    "typeIdentifier": "t_bytes_memory_ptr",
-                    "typeString": "bytes memory"
-                }
-            ],
             "id": ast.next_node_id(),
             "name": "keccak256",
             "nodeType": "Identifier",
-            "overloadedDeclarations": [],
-            "referencedDeclaration": -8,
-            "src": "1113:9:18",
+            #"overloadedDeclarations": [],
+            #"referencedDeclaration": -8,
             "typeDescriptions": {
-                "typeIdentifier": "t_function_keccak256_pure$_t_bytes_memory_ptr_$returns$_t_bytes32_$",
-                "typeString": "function (bytes memory) pure returns (bytes32)"
             }
         },
         "id": ast.next_node_id(),
-        "isConstant": False,
-        "isLValue": False,
-        "isPure": False,
         "kind": "functionCall",
-        "lValueRequested": False,
-        "nameLocations": [],
         "names": [],
         "nodeType": "FunctionCall",
-        "src": "1113:31:18",
-        "tryCall": False,
         "typeDescriptions": {
-            "typeIdentifier": "t_bytes32",
-            "typeString": "bytes32"
         }
     }
 
@@ -151,37 +95,19 @@ def patch_node(id_type, return_type, node, slot_id, key_id_node=None, rhs=None):
         'patched': True,
         "arguments": args,
         "expression": {
-            "argumentTypes": [
-                {
-                    "typeIdentifier": "t_uint256",
-                    "typeString": "uint256" # TODO: correct types..?
-                }
-            ],
             "id": ast.next_node_id(),
             "name": method_name,
             "nodeType": "Identifier",
-            "overloadedDeclarations": [],
-            "referencedDeclaration": 82200,
-            "src": "29774:11:0",
+            #"overloadedDeclarations": [],
+            #"referencedDeclaration": 82200,
             "typeDescriptions": {
-                "typeIdentifier": "t_function_internal_view$_t_address_$returns$_t_uint256_$",
-                "typeString": "function (address) view returns (uint256)"
             }
         },
         "id": ast.next_node_id(),
-        "isConstant": False,
-        "isLValue": False,
-        "isPure": False,
         "kind": "functionCall",
-        "lValueRequested": False,
-        "nameLocations": [],
         "names": [],
         "nodeType": "FunctionCall",
-        "src": "29774:20:0",
-        "tryCall": False,
         "typeDescriptions": {
-            "typeIdentifier": "t_uint256",
-            "typeString": "uint256"
         }
     }
 

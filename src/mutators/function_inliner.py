@@ -6,7 +6,6 @@ def make_block(*statements):
         "id": 0,
         #"parent_id": parent_id, # TODO: pass this..
         "nodeType": "Block",
-        "src": "29254:584:0",
         "statements": statements
     }
 
@@ -19,14 +18,9 @@ def make_tuple(components):
     return {
         "components": ast.clone(components, new_id),
         "id": new_id,
-        "isConstant": False,
-        "isInlineArray": False,
-        "isLValue": False,
-        "isPure": False,
-        "lValueRequested": False,
         "nodeType": "TupleExpression",
         "typeDescriptions": {
-            # just to satisfy `sol-ast-compile` tool
+            # just to satisfy `sol-ast-compile` tool; pull request pending
         }
     }
 
@@ -65,23 +59,43 @@ def make_var_dec_st_from_func_call(params_decl, arg_values):
 
     return var_dec
 
-# TODO: this does not embed parameters :(
 def embed_modifiers_inplace(fd_node):
     # kind = baseConstructorSpecifier  is implied Super.Body + This.body
     # kind = modifierInvocation depends on the PlaceholderStatement
     def replace_placeholder(node, parent):
         if node['nodeType'] == 'PlaceholderStatement':
             # TODO: by now it's really clear I need a library to update parent_id and such hotswap/inject/attach/etc.
-            clone_body = ast.clone(fd_node['body'], node['parent_id'])
-            node.clear()
-            node.update(clone_body)
+            idx = parent['statements'].index(node)
+            parent['statements'].remove(node)
+            cloned_fd = ast.clone(fd_node['body'], parent['id'])
+            ast.copy_body(parent, cloned_fd)
+
+            # TODO: the above is ugly fix to remove the Block wrapping this otherwise
+            # need to verify it is correct
+            # clone_body = ast.clone(fd_node['body'], node['parent_id'])
+            # node.clear()
+            # node.update(clone_body)
 
     while fd_node.get('modifiers'):
         mod = fd_node['modifiers'].pop()
         mod_def = ast.by_id[mod['modifierName']['referencedDeclaration']]
-        mod_body = ast.clone(mod_def['body'], fd_node['id'])
-        ast.walk_tree(mod_body, callback=replace_placeholder)
-        fd_node['body'] = mod_body
+        if mod['kind'] == 'baseConstructorSpecifier':
+            # kinda annoying but constructors are considers modifiers
+            # but also their referencedDeclaration points to the contract, not the constructor
+            constructors = []
+            def get_constructor(node, parent):
+                if node['nodeType'] == 'FunctionDefinition' and node['kind'] == 'constructor':
+                    constructors.append(node)
+
+            ast.walk_tree(mod_def, callback=get_constructor)
+            mod_def = constructors[0]
+            mod_body = ast.clone(mod_def['body'], fd_node['id'])
+            # TODO: append @inlined comment to the constructors inlined as well...
+            ast.copy_body(fd_node['body'], mod_body)
+        else:
+            mod_body = ast.clone(mod_def['body'], fd_node['id'])
+            ast.walk_tree(mod_body, callback=replace_placeholder)
+            fd_node['body'] = mod_body
 
         mod_args = mod.get('arguments')
         if mod_args:
@@ -104,7 +118,6 @@ def embed_inline_func_inplace(fc_node):
         return False # TODO: check when body is empty (calls on interfaces?)
     
     # TODO: walk the body to replace identifiers referncing the func_dec params
-    # TODO: embed modifiers first?
     cloned_func = ast.clone(func_dec)
     embed_modifiers_inplace(cloned_func)
 
@@ -114,9 +127,16 @@ def embed_inline_func_inplace(fc_node):
     #embed_modifiers_inplace(inline_body) # TODO: need to replace func_dec not func_dec['body']
     # create VariableDeclarations (decl_params) = (passed_args)
     vds = make_var_dec_st_from_func_call(func_dec['parameters']['parameters'], fc_node['arguments'])
-    vds['documentation'] = '@inlined from ' + func_dec['name']
     vds['parent_id'] = inline_body['id']
     inline_body['statements'].insert(0, vds)
+
+    # TODO: where should docstirng be put?
+    # (outside is probably more useful for vs code but only if the entire call + args are shown)
+    docstring = '@inlined from ' + func_dec['name']
+    # docstring outside block:
+    inline_body['documentation'] = docstring
+    # docstring inside block:
+    #vds['documentation'] = docstring
 
     # for some reason documentation does not work on block bodies :(
     # if 'documentation' not in inline_body:
@@ -127,7 +147,7 @@ def embed_inline_func_inplace(fc_node):
     fc_node.update(inline_body)
     return True
 
-def embed_inline(_ast, contract_name, method_name, embed_modifiers=True, max_depth=-1):
+def embed_inline(_ast, contract_name, method_name, embed_top_modifiers=True, max_depth=-1, delete_internal=False):
     global ast
     ast = _ast
 
@@ -146,10 +166,9 @@ def embed_inline(_ast, contract_name, method_name, embed_modifiers=True, max_dep
 
     if not target_func:
         return False
-        
-    # first, embed modifiers (TODO: need to embed modifiers for FunctionCall too)
+
     # TODO: fix reparenting here
-    if embed_modifiers:
+    if embed_top_modifiers:
         embed_modifiers_inplace(target_func)
 
     # while there are FunctionCalls, inline them
@@ -173,9 +192,6 @@ def embed_inline(_ast, contract_name, method_name, embed_modifiers=True, max_dep
                 func_calls.append(node)
 
         ast.walk_tree(ast.root, callback=find_related_func_call)
-        #print(func_calls)
-        #last_call = func_calls[-1]
-        #parent = ast.by_id[last_call['parent_id']]
 
         count = 0
         for fc in func_calls:
@@ -186,5 +202,20 @@ def embed_inline(_ast, contract_name, method_name, embed_modifiers=True, max_dep
             break
 
         max_depth -= 1
+
+    import sys
+    if delete_internal:
+        tf = [target_func]
+        def delete_internal_func_calls(node, parent):
+            if node['nodeType'] != 'FunctionDefinition':
+                return
+
+            if node['visibility'] != 'internal':
+                return
+
+            print('deleting', node['name'], file=sys.stderr)
+            parent['nodes'].remove(node)
+
+        ast.walk_tree(target_contract, callback=delete_internal_func_calls)
 
     return True
