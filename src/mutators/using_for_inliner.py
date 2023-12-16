@@ -1,3 +1,5 @@
+import argparse
+
 # TODO: fix this temporary hack
 ast = None
 
@@ -15,10 +17,9 @@ def make_identifier(name, parent_id, referencedDeclaration=-1):
     }
 
 # embed "using .. for .." statements BECAUSE THEY SUCK
-def embed_using_for(_ast):
+def embed_using_for(_ast, keep_directive=False):
     global ast
     ast = _ast
-
     lib_funcs_to_lib_id = {}
     lib_ids = {}
     for func_def in ast.by_type.get('FunctionDefinition'):
@@ -52,6 +53,14 @@ def embed_using_for(_ast):
         mem_acc['expression'] = id_node
         func_call['arguments'] = [first_arg] + func_call['arguments']
 
-    for using in ast.by_type.get('UsingForDirective'):
-        ast.by_id[using['parent_id']]['nodes'].remove(using)
+    if not keep_directive:
+        for using in ast.by_type.get('UsingForDirective'):
+            ast.by_id[using['parent_id']]['nodes'].remove(using)
 
+    return True
+
+def run_cli(_ast, raw_args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-k', '--keep-directive', default=False, action='store_true', help='inline but keep the "using .. for .." directive')
+    args = parser.parse_args(raw_args)
+    return embed_using_for(_ast, args.keep_directive)

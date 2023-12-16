@@ -1,5 +1,7 @@
+import argparse
 
-# TODO: need to merge constructors and such
+# TODO: flag to remove classes inherited from
+# TODO: need to merge constructors and such (for now it can be done with the function inliner)
 def delinearize(ast, contract_name):
     node = None
     for id_node in ast.by_type['ContractDefinition']:
@@ -8,8 +10,9 @@ def delinearize(ast, contract_name):
             break
 
     if not node:
-        return False
-    
+        raise Exception('no contract found: "%s"' % contract_name)
+        # return False
+
     # inline inherited contract bodies (as is for now)
     base_ids = reversed(node['linearizedBaseContracts'][1:])
     for base_id in base_ids:
@@ -30,3 +33,8 @@ def delinearize(ast, contract_name):
     node['baseContracts'] = []
     return True
 
+def run_cli(ast, raw_args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--contract', required=True, help='filter by contract name')
+    args = parser.parse_args(raw_args)
+    return delinearize(ast, args.contract)

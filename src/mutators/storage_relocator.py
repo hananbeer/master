@@ -222,3 +222,7 @@ def patch_storage_slots(_ast):
     # for type_id in types_set:
     #     if type_id not in ['uint256', 'address', 'bytes32', 'bool']:
     #         print(make_type(type_id))
+
+
+def run_cli(_ast, raw_args):
+    return patch_storage_slots(_ast)

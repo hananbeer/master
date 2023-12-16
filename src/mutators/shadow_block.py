@@ -8,3 +8,7 @@ def remove_blocks(ast):
             parent['statements'].remove(node)
 
     ast.walk_tree(ast.root, callback=lighten_up)
+    return True
+
+def run_cli(ast, raw_args):
+    return remove_blocks(ast)

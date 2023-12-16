@@ -15,3 +15,7 @@ def rename_all(ast):
 
     ast.walk_tree(ast.root, callback=rename_var_decs)
     ast.walk_tree(ast.root, callback=rename_ids)
+    return True
+
+def run_cli(_ast, raw_args):
+    return rename_all(_ast)

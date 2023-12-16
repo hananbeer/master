@@ -1,3 +1,4 @@
+import argparse
 
 ast = None
 
@@ -135,6 +136,19 @@ def embed_inline_func_inplace(fc_node):
     fc_node.update(inline_body)
     return True
 
+def delete_internal_func_defs(target_contract):
+    def delete_internal(node, parent):
+        if node['nodeType'] != 'FunctionDefinition':
+            return
+
+        if node['visibility'] != 'internal':
+            return
+
+        parent['nodes'].remove(node)
+
+    ast.walk_tree(target_contract, callback=delete_internal)
+
+# TODO: need to make contract & method name filtering optional and go through all contract(s)
 def embed_inline(_ast, contract_name, method_name, embed_top_modifiers=True, max_depth=-1, delete_internal=False):
     global ast
     ast = _ast
@@ -153,7 +167,7 @@ def embed_inline(_ast, contract_name, method_name, embed_top_modifiers=True, max
             break
 
     if not target_func:
-        return False
+        raise Exception('no target function found: "%s.%s"' % (contract_name, method_name))
 
     # TODO: fix reparenting here
     if embed_top_modifiers:
@@ -192,17 +206,16 @@ def embed_inline(_ast, contract_name, method_name, embed_top_modifiers=True, max
 
     # TODO: this should be a separate function & option to remove modifiers too
     if delete_internal:
-        # TODO: fix this stupid hack to access from the callback
-        tf = [target_func]
-        def delete_internal_func_calls(node, parent):
-            if node['nodeType'] != 'FunctionDefinition':
-                return
-
-            if node['visibility'] != 'internal':
-                return
-
-            parent['nodes'].remove(node)
-
-        ast.walk_tree(target_contract, callback=delete_internal_func_calls)
+        delete_internal_func_defs(target_contract)
 
     return True
+
+def run_cli(_ast, raw_args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--contract', required=True, help='filter by contract name')
+    parser.add_argument('-m', '--method', required=True, help='filter by method name')
+    parser.add_argument('-t', '--top-modifiers', help='embed modifiers from function definition', action='store_true')
+    parser.add_argument('-d', '--max-depth', default=-1, type=int, help='embed modifiers from function definition')
+    parser.add_argument('-x', '--delete-internal', help='delete internal function definitions after inlining', action='store_true')
+    args = parser.parse_args(raw_args)
+    return embed_inline(_ast, args.contract, args.method, embed_top_modifiers=args.top_modifiers, max_depth=args.max_depth, delete_internal=args.delete_internal)

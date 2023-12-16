@@ -12,6 +12,19 @@ npm install -g solc-typed-ast
 
 # Usage
 
+`ast_patcher.py` now supports argparse! here's an example showing how to chain multiple mutators:
+
+```bash
+cat ./data/build.json |
+python ./src/ast_patcher.py - shadow_block |
+python ./src/ast_patcher.py - function_inliner -c Zapper_Matic_Bridge_V1_1 -m ZapBridge -d 2 |
+python ./src/ast_patcher.py - using_for_inliner |
+python ./src/ast_patcher.py - delinearizer -c Zapper_Matic_Bridge_V1_1 |
+sol-ast-compile --source --stdin --mode json
+```
+
+### Old usage:
+
 ```bash
 # random chosen contract to work with
 # start by flattening the solidity files into a single file
@@ -34,6 +47,7 @@ there's also a work in progress AST-to-source rebuilder:
 ```bash
 python ./src/builder/main.py ./data/magic.json > ./data/rebuild.sol
 ```
+
 
 # Notes
 

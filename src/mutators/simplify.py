@@ -97,6 +97,7 @@ required_keys = [
     'baseContract',
 ]
 
+# TODO: remove
 removed = set()
 seen = set()
 
@@ -120,3 +121,7 @@ def simplify(ast):
     # if len(keep) > 0:
     #     print('%s is not seen, better keep it' % keep, file=sys.stderr)
     # print(sorted(removed), file=sys.stderr)
+    return True
+
+def run_cli(ast, raw_args):
+    return simplify(ast)
