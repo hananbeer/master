@@ -65,7 +65,10 @@ class SolidityAstRebuilder:
         self.write('using ')
         self.visit_node(node['libraryName'])
         self.write(' for ')
-        self.visit_node(node['typeName'])
+        if 'typeName' in node:
+          self.visit_node(node['typeName'])
+        else:
+          self.write('*')
         #self.writeline(';\n')
 
     def process_IdentifierPath(self, node):
@@ -109,6 +112,27 @@ class SolidityAstRebuilder:
                 self.writeline(';')
         
         self.pop()
+    
+    def process_EnumDefinition(self, node):
+        self.push('enum ' + node['name'] + ' {')
+        for child in node.get('members', []):
+            self.visit_node(child)
+            if 'body' not in child:
+                self.writeline(';')
+        
+        self.pop()
+    
+    def process_StructDefinition(self, node):
+        self.push('struct ' + node['name'] + ' {')
+        for child in node.get('members', []):
+            self.visit_node(child)
+            if 'body' not in child:
+                self.writeline(';')
+        
+        self.pop()
+    
+    def process_EnumValue(self, node):
+        self.writeline(node['name'] + ',')
     
     def process_InheritanceSpecifier(self, node):
         self.visit_node(node['baseName'])
@@ -311,6 +335,12 @@ class SolidityAstRebuilder:
         self.visit_node(node['parameters'])
         #self.writeline(');')
 
+    def process_ErrorDefinition(self, node):
+        self.tab()
+        self.write('error ' + node['name'])
+        self.visit_node(node['parameters'])
+        #self.writeline(');')
+
     def visit_list(self, args, brackets=False):
         # TODO: figure out context to wrap or not
         if brackets or len(args) > 1:
@@ -355,19 +385,61 @@ class SolidityAstRebuilder:
         
         self.pop()
 
+    def process_Conditional(self, node):
+        #self.tab()
+        self.write('(')
+        self.visit_node(node['condition'])
+        self.write(' ? ')
+        self.visit_node(node['trueExpression'])
+        self.write(' : ')
+        self.visit_node(node['falseExpression'])
+        self.write(')')
+
+    def process_NewExpression(self, node):
+        #self.tab()
+        self.write('new ???') # TODO: ..
+        # self.visit_node(node['expression'])
+
+    def process_FunctionTypeName(self, node):
+        #self.tab()
+        self.write('**FunctionTypeName**??') # TODO: ..
+        # self.visit_node(node['expression'])
+
     def process_ForStatement(self, node):
+        # print(', '.join(node.keys()))
         self.tab()
         self.write('for (')
-        self.visit_node(node['initializationExpression'])
-        self.code = self.code[:-2] # hack to remove the newline + semicolon
+        if 'initializationExpression' in node:
+          self.visit_node(node['initializationExpression'])
+          self.code = self.code[:-2] # hack to remove the newline + semicolon
         self.write('; ')
         self.visit_node(node['condition'])
         self.write('; ')
-        self.visit_node(node['loopExpression'])
-        self.code = self.code[:-2] # hack to remove the newline + semicolon
+        if 'loopExpression' in node:
+          self.visit_node(node['loopExpression'])
+          self.code = self.code[:-2] # hack to remove the newline + semicolon
         self.push(') {')
         self.visit_node(node['body'])
         self.pop()
+
+    def process_WhileStatement(self, node):
+        self.tab()
+        self.write('while (')
+        self.visit_node(node['condition'])
+        self.push(') {')
+        self.visit_node(node['body'])
+        self.pop()
+
+    def process_Break(self, node):
+        self.tab()
+        self.write('break')
+
+    def process_RevertStatement(self, node):
+        self.tab()
+        self.write('revert(')
+        if 'expression' in node:
+            self.visit_node(node['expression'])
+        self.writeline(');')
 
     def process_Return(self, node):
         self.tab()
@@ -376,6 +448,10 @@ class SolidityAstRebuilder:
             self.write(' ')
             self.visit_node(node['expression'])
         self.writeline(';')
+
+    def process_UserDefinedValueTypeDefinition(self, node):
+        self.tab()
+        self.write('type ??') # TODO: ..
 
     def process_InlineAssembly(self, node):
         self.tab()
@@ -424,5 +500,6 @@ class SolidityAstRebuilder:
         self.visit_node(node['expression'])
 
     def process_unknown(self, node):
-        # self.write(f"\n**{node['nodeType']}**\n")
-        raise Exception('unknown or missing node type!')
+        print(f"\n**{node['nodeType']}**\n")
+        exit(0)
+        # raise Exception('unknown or missing node type!')
