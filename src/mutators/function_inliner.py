@@ -100,28 +100,28 @@ def embed_inline_func_inplace(fc_node):
         return False # this is likely an external call (TODO: test Super.func and I guess public funcs)
     
     ref_id = fc_node['expression']['referencedDeclaration']
-    func_dec = ast.by_id.get(ref_id)
-    if not func_dec:
+    func_def = ast.by_id.get(ref_id)
+    if not func_def:
         return False
 
-    if 'body' not in func_dec:
+    if 'body' not in func_def or func_def['visibility'] != 'internal':
         return False # TODO: check when body is empty (calls on interfaces?)
     
     # TODO: walk the body to replace identifiers referncing the func_dec params
-    cloned_func = ast.clone(func_dec)
+    cloned_func = ast.clone(func_def)
     embed_modifiers_inplace(cloned_func)
 
     inline_body = cloned_func['body']
     inline_body['parent_id'] = fc_node['parent_id']
 
     # create VariableDeclarations (decl_params) = (passed_args)
-    vds = make_var_dec_st_from_func_call(func_dec['parameters']['parameters'], fc_node['arguments'])
+    vds = make_var_dec_st_from_func_call(func_def['parameters']['parameters'], fc_node['arguments'])
     vds['parent_id'] = inline_body['id']
     inline_body['statements'].insert(0, vds)
 
     # TODO: where should docstirng be put?
     # (outside is probably more useful for vs code but only if the entire call + args are shown)
-    docstring = '@inlined from ' + func_dec['name']
+    docstring = '@inlined from ' + func_def['name']
     # docstring outside block:
     inline_body['documentation'] = docstring
     # docstring inside block:
